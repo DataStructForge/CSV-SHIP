@@ -306,6 +306,7 @@ def insert_data_from_csv(
                 # Estatísticas globais
                 total_linhas_processadas = 0
                 total_linhas_inseridas = 0
+                num_colunas_detectadas_no_arquivo = 0
                 # Configurar opções para pandas
                 csv_options = {
                     'sep': separator,
@@ -346,6 +347,7 @@ def insert_data_from_csv(
                         header_line = file.readline().strip()
                         reader = csv_module.reader([header_line], delimiter=separator, quotechar='"')
                         header = next(reader)
+                        num_colunas_detectadas_no_arquivo = len(header)
                         
                         # Sanitizar nomes de colunas
                         sanitized_columns = ["".join(c if c.isalnum() else "_" for c in col) for col in header]
@@ -399,10 +401,11 @@ def insert_data_from_csv(
                                 # Processar valores nulos
                                 processed_row = []
                                 for value in row:
-                                    if value.strip() == '':
+                                    stripped_value = value.strip() if isinstance(value, str) else value
+                                    if stripped_value == '':
                                         processed_row.append(None)
                                     else:
-                                        processed_row.append(value)
+                                        processed_row.append(stripped_value)
                                 
                                 batch.append(tuple(processed_row))
                                 
@@ -426,6 +429,7 @@ def insert_data_from_csv(
                             total_linhas_inseridas += len(batch)
                             logging.info(f"Inseridas últimas {len(batch)} linhas na tabela '{full_table_name_for_log}'")
                         
+                        total_linhas_processadas = line_count - 1
                         # Exibir estatísticas finais
                         if linhas_com_colunas_divergentes > 0:
                             logging.info(f"Estatísticas do arquivo {csv_file_path}:")
@@ -438,16 +442,21 @@ def insert_data_from_csv(
                     
                     success = True
                     logging.info(f"Processamento alternativo bem-sucedido para '{csv_file_path}'")
-                    logging.info(f"Total de linhas processadas: {line_count-1}, linhas inseridas: {total_linhas_inseridas}")
-                    logging.info(f"Total de colunas processadas: {len(header)}, colunas inseridas: {len(header)}")
+                    logging.info(f"Total de linhas processadas: {total_linhas_processadas}, linhas inseridas: {total_linhas_inseridas}")
+                    logging.info(f"Total de colunas processadas: {num_colunas_detectadas_no_arquivo}, colunas inseridas: {num_colunas_detectadas_no_arquivo}")
                 else:
                     # Abordagem padrão com pandas
+                    first_chunk = True
                     for i, chunk_df in enumerate(pd.read_csv(csv_file_path, **csv_options)):
                         logging.info(
                             f"Processando chunk {i+1} do arquivo {csv_file_path} ({len(chunk_df)} linhas)"
                         )
                         
                         total_linhas_processadas += len(chunk_df)
+
+                        if first_chunk:
+                            num_colunas_detectadas_no_arquivo = len(chunk_df.columns)
+                            first_chunk = False
 
                         chunk_df.columns = [
                             "".join(c if c.isalnum() else "_" for c in col)
@@ -469,7 +478,7 @@ def insert_data_from_csv(
                                 if pd.isna(item):
                                     processed_row.append(None)
                                 else:
-                                    processed_row.append(str(item))
+                                    processed_row.append(str(item).strip())
                             data_tuples.append(tuple(processed_row))
 
                         try:
@@ -496,7 +505,7 @@ def insert_data_from_csv(
                     f"Todos os dados do arquivo '{csv_file_path}' foram inseridos com sucesso na tabela '{full_table_name_for_log}' usando encoding {encoding}."
                 )
                 logging.info(f"Total de linhas processadas: {total_linhas_processadas}, linhas inseridas: {total_linhas_inseridas}")
-                logging.info(f"Total de colunas processadas: {colunas_esperadas}, colunas inseridas: {colunas_esperadas}")
+                logging.info(f"Total de colunas processadas: {num_colunas_detectadas_no_arquivo}, colunas inseridas: {num_colunas_detectadas_no_arquivo}")
                 
             except UnicodeDecodeError as e:
                 last_error = e
@@ -523,6 +532,7 @@ def insert_data_from_csv(
                                 header_line = file.readline().strip()
                                 reader = csv_module.reader([header_line], delimiter=separator)
                                 header = next(reader)
+                                num_colunas_detectadas_no_arquivo = len(header)
                                 
                                 # Sanitizar nomes de colunas
                                 sanitized_columns = ["".join(c if c.isalnum() else "_" for c in col) for col in header]
@@ -576,10 +586,11 @@ def insert_data_from_csv(
                                         # Processar valores nulos
                                         processed_row = []
                                         for value in row:
-                                            if value.strip() == '':
+                                            stripped_value = value.strip() if isinstance(value, str) else value
+                                            if stripped_value == '':
                                                 processed_row.append(None)
                                             else:
-                                                processed_row.append(value)
+                                                processed_row.append(stripped_value)
                                         
                                         batch.append(tuple(processed_row))
                                         
@@ -614,8 +625,9 @@ def insert_data_from_csv(
                                         logging.info(f"  * {num_cols} colunas: {count} linhas")
                             
                             success = True
+                            total_linhas_processadas = line_count - 1
                             logging.info(f"Processamento alternativo bem-sucedido para '{csv_file_path}'")
-                            logging.info(f"Total de linhas processadas: {line_count-1}, linhas inseridas: {total_linhas_inseridas}")
+                            logging.info(f"Total de linhas processadas: {total_linhas_processadas}, linhas inseridas: {total_linhas_inseridas}")
                             logging.info(f"Total de colunas processadas: {len(header)}, colunas inseridas: {len(header)}")
                             break
                             
